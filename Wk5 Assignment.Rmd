@@ -1,0 +1,73 @@
+---
+title: "Data Acquisition and Management Week 5 Assignment"
+author: "Chun San Yip"
+date: "2019/03/01"
+output: html_document
+---
+
+Overview:
+The assignment for this week is related to Tidying and Transforming Data of arrival delay performance of 2 airlines.
+
+Load all the required packages.
+```{r load-packages, message = FALSE}
+library(tidyverse)
+library(RMariaDB)
+```
+
+Read data from MySQL
+```{r}
+con <- dbConnect(RMariaDB::MariaDB(), user="test", password="test", dbname="adelay", host="localhost")
+con
+dbListTables( con )
+
+#apply out SELECT statement to the database we established a connection to.
+arrivalDelay <- dbGetQuery( con, 'SELECT * FROM ad;' )
+
+#display the head of the resulting R dataframe
+head( arrivalDelay )
+
+#I didn't include the blank line in the database
+
+#Fill out blank field in column airlines
+arrivalDelay$airlines[2]<-"Alaska"
+arrivalDelay$airlines[4]<-"Am West"
+```
+
+Transform data from one format to another format
+```{r}
+ad <- arrivalDelay %>%
+# Tidy up the table by gather to narrow all destinations to a column
+  gather(key = "destination" , value= "numberOfFlight", LosAngeles:Seattle, convert=TRUE) %>%
+# Spread out the "On time" and "Delayed" status
+  spread(key = status, value = numberOfFlight, convert=TRUE) %>%
+# Add several new columns
+  mutate("totalFlight" = delayed + `on time`,
+         "delayed%" = round(delayed/totalFlight*100, 2),
+         "onTime%" = round(`on time`/totalFlight*100, 2))
+ad
+```
+
+Compare arrival delayed flight percentage of 2 airlines at each destination 
+```{r}
+ggplot(data=ad) + 
+  geom_col(mapping= aes(x = destination, y=`delayed%`, fill=airlines), position = "dodge")+
+  labs(y="arrival delay rate")
+```
+
+Am West Airline has a higher percentage of arrival delayed flights than Alaska Airline at all 5 destinations.
+
+Look further into the overall arrival delayed flight percentage between 2 airlines
+```{r}
+adsum<-ad%>%
+  group_by(airlines)%>%
+  summarise(sum(delayed), sum(totalFlight))
+adsum
+```
+Compare overall arrival delayed flight percentage of 2 airlines 
+```{r}
+ggplot(data=adsum) + 
+  geom_col(mapping= aes(x = airlines, y=(`sum(delayed)`/`sum(totalFlight)`*100), fill=airlines))+
+  labs(y="overall arrival delay rate")
+```
+
+Contracy to the perception from the first diagram, the overall flight arrival delayed percentage of Am West Airline is lower than Alaska Airline. Am West Airline who has almost twice as many flights as Alaska Airline is the better overall performer among the two.
